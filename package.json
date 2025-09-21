@@ -6,12 +6,14 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
+    "check-types": "turbo run check-types",
+    "add:server": "cd apps/server && npm install"
   },
   "devDependencies": {
     "prettier": "^3.6.2",
+    "tsc-watch": "^7.1.1",
     "turbo": "^2.5.6",
-    "typescript": "5.9.2"
+    "typescript": "^5.9.2"
   },
   "engines": {
     "node": ">=18"
@@ -20,5 +22,8 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "npm": "^11.6.0"
+  }
 }
