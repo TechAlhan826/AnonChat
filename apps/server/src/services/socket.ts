@@ -4,13 +4,6 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// new Redis({
-//     host: 'redis-scale-anon-chat.c.aivencloud.com',
-//     port: 23898,
-//     username: 'default',
-//     password: 'AVNS_fCz-NuF3lc7_K2rUAQO' 
-// }); 
-
 const REDIS_URL = process.env.REDIS_SERVICE_URI || "rediss://default:";
 //console.log(REDIS_URL);
 const pub = new Redis(REDIS_URL); // Redis Publisher
