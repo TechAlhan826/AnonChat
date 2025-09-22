@@ -1,15 +1,16 @@
 'use client'
 import { useState } from "react";
-import { useLocation } from "wouter";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { LogIn, Plus, Shield, Zap, Users } from "lucide-react";
-import { Button } from "../components/ui/button";
-import { Card, CardContent } from "../components/ui/card";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { useAuth } from "../hooks/use-auth";
-import { useToast } from "../hooks/use-toast";
-import { apiRequest } from "../lib/queryClient";
+import { Button } from "./components/ui/button";
+import { Card, CardContent } from "./components/ui/card";
+import { Input } from "./components/ui/input";
+import { Label } from "./components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
+import { useAuth } from "./hooks/use-auth";
+import { useToast } from "./hooks/use-toast";
+import { apiRequest } from "./lib/queryClient";
 
 export default function Home() {
   const [roomCode, setRoomCode] = useState("");
@@ -19,7 +20,7 @@ export default function Home() {
   const [isCreating, setIsCreating] = useState(false);
   const { isAuthenticated, createGuestSession } = useAuth();
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  const router = useRouter();
 
   const handleJoinRoom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,9 +57,9 @@ export default function Home() {
       });
       
       if (isAuthenticated) {
-        setLocation("/dashboard");
+        router.push("/dashboard");
       } else {
-        setLocation(`/chat/${roomCode.toUpperCase()}`);
+        router.push(`/chat/${roomCode.toUpperCase()}`);
       }
     } catch (error) {
       toast({
@@ -111,9 +112,9 @@ export default function Home() {
       });
 
       if (isAuthenticated) {
-        setLocation("/dashboard");
+        router.push("/dashboard");
       } else {
-        setLocation(`/chat/${room.code}`);
+        router.push(`/chat/${room.code}`);
       }
     } catch (error) {
       toast({

@@ -1,6 +1,7 @@
 'use client'
 import { useState } from "react";
-import { useLocation } from "wouter";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -15,13 +16,13 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const { login, isLoading } = useAuth();
-  const [location, setLocation] = useLocation();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await login(email, password);
-      setLocation("/dashboard");
+      router.push("/dashboard");
     } catch (error) {
       // Error handled in useAuth hook
     }
@@ -98,7 +99,7 @@ export default function Login() {
                   type="button"
                   variant="link"
                   className="text-sm p-0"
-                  onClick={() => setLocation("/auth/forgot-password")}
+                  onClick={() => router.push("/auth/forgot-password")}
                   data-testid="link-forgot-password"
                 >
                   Forgot password?
@@ -119,7 +120,7 @@ export default function Login() {
                 <Button
                   variant="link"
                   className="p-0 text-primary"
-                  onClick={() => setLocation("/auth/register")}
+                  onClick={() => router.push("/auth/register")}
                   data-testid="link-register"
                 >
                   Sign up

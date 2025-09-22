@@ -1,6 +1,7 @@
 'use client'
 import { useState } from "react";
-import { useLocation } from "wouter";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
@@ -17,7 +18,7 @@ export default function Register() {
   });
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const { register, isLoading } = useAuth();
-  const [, setLocation] = useLocation();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +29,7 @@ export default function Register() {
 
     try {
       await register(formData.name, formData.email, formData.password);
-      setLocation("/auth/login");
+      router.push("/auth/login");
     } catch (error) {
       // Error handled in useAuth hook
     }
@@ -138,7 +139,7 @@ export default function Register() {
                 <Button
                   variant="link"
                   className="p-0 text-primary"
-                  onClick={() => setLocation("/auth/login")}
+                  onClick={() => router.push("/auth/login")}
                   data-testid="link-login"
                 >
                   Sign in

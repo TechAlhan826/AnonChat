@@ -3,12 +3,13 @@ import { Button } from "../components/ui/button";
 import { useAuth } from "../hooks/use-auth";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { useTheme } from "./theme-provider";
-import { Link, useLocation } from "wouter";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export function Navigation() {
   const { user, isAuthenticated, isGuest, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [location, setLocation] = useLocation();
+  const router = useRouter();
 
   const getInitials = (name: string) => {
     return name.split(" ").map(n => n[0]).join("").toUpperCase();
@@ -44,13 +45,13 @@ export function Navigation() {
               <div className="flex space-x-2">
                 <Button
                   variant="outline"
-                  onClick={() => setLocation("/auth/login")}
+                  onClick={() => router.push("/auth/login")}
                   data-testid="button-login"
                 >
                   Login
                 </Button>
                 <Button
-                  onClick={() => setLocation("/auth/register")}
+                  onClick={() => router.push("/auth/register")}
                   data-testid="button-register"
                 >
                   Sign Up

@@ -1,18 +1,19 @@
 'use client'
 import { useState, useEffect } from "react";
-import { useParams, useLocation } from "wouter";
-import { MessageList } from "../../components/chat/message-list";
-import { MessageInput } from "../../components/chat/message-input";
-import { Button } from "../../components/ui/button";
-import { Card, CardContent } from "../../components/ui/card";
+import Link from "next/link";
+import { useRouter, useParams } from "next/navigation";
+import { MessageList } from "../components/chat/message-list";
+import { MessageInput } from "../components/chat/message-input";
+import { Button } from "../components/ui/button";
+import { Card, CardContent } from "../components/ui/card";
 import { LogOut } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "../../hooks/use-auth";
-import { useToast } from "../../hooks/use-toast";
+import { useAuth } from "../hooks/use-auth";
+import { useToast } from "../hooks/use-toast";
 
 export default function ChatRoom() {
   const { code } = useParams();
-  const [, setLocation] = useLocation();
+  const router = useRouter();
   const { isGuest, createGuestSession } = useAuth();
   const { toast } = useToast();
   const [hasJoined, setHasJoined] = useState(false);
@@ -54,7 +55,7 @@ export default function ChatRoom() {
           description: error instanceof Error ? error.message : "Failed to join room",
           variant: "destructive",
         });
-        setLocation("/");
+        router.push("/");
       }
     };
 
@@ -86,7 +87,7 @@ export default function ChatRoom() {
         title: "Success",
         description: "Left room successfully",
       });
-      setLocation("/");
+      router.push("/");
     } catch (error) {
       toast({
         title: "Error",

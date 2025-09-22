@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "../components/chat/sidebar";
 import { MessageList } from "../components/chat/message-list";
 import { MessageInput } from "../components/chat/message-input";
@@ -20,7 +21,7 @@ interface Room {
 export default function Dashboard() {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const { isAuthenticated } = useAuth();
-  const [, setLocation] = useLocation();
+  const router = useRouter();
 
   const { data: rooms, isLoading: isLoadingRooms } = useQuery({
     queryKey: ["/api/rooms/my-rooms"],
@@ -49,9 +50,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      setLocation("/auth/login");
+      router.push("/auth/login");
     }
-  }, [isAuthenticated, setLocation]);
+  }, [isAuthenticated, router]);
 
   if (!isAuthenticated) {
     return null;

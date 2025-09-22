@@ -1,6 +1,7 @@
 'use client'
 import { useState } from "react";
-import { useLocation } from "wouter";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
@@ -12,7 +13,7 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +73,7 @@ export default function ForgotPassword() {
               <Button
                 variant="link"
                 className="text-sm p-0"
-                onClick={() => setLocation("/auth/login")}
+                onClick={() => router.push("/auth/login")}
                 data-testid="link-back-to-login"
               >
                 ← Back to sign in
