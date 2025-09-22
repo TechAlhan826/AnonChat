@@ -3,7 +3,7 @@ import Image, { type ImageProps } from "next/image";
 //import { Button } from "@repo/ui/button";
 import styles from "./page.module.css";
 import { useState } from "react";
-import { useSocket } from "../context/SocketProvider";
+import { useSocket } from "@/context/SocketProvider";
 
 export default function Page(){
   const [message, setMessage] = useState('');
