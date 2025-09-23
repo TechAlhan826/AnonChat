@@ -1,16 +1,28 @@
 import http from "http";
+import express from "express";
+import dotenv from "dotenv";
+import mongoose from "mongoose";
 import SocketService from "./services/socket";
+import { roomsRouter } from "./routes/rooms"; // See below
+import { usersRouter } from "./routes/users";
 
-async function init(){
-    const httpServer = http.createServer();
-    const PORT = process.env.PORT || 5000;
+dotenv.config();
 
-    const socketService = new SocketService();
-    socketService.io.attach(httpServer);
+const app = express();
+app.use(express.json());
 
-    httpServer.listen(PORT, ()=> console.log(`HTTP Server Is Running At PORT : ${PORT}`));
-    socketService.initListeners(); 
+const httpServer = http.createServer(app);
+const socketService = new SocketService();
+socketService.io.attach(httpServer);
+
+app.use("/api/rooms", roomsRouter);
+app.use("/api/users", usersRouter);
+
+async function init() {
+  await mongoose.connect(process.env.MONGO_URI || "", { dbName: "anonchat" }); // Same DB as auth
+  socketService.initListeners();
+  const PORT = process.env.PORT || 5000;
+  httpServer.listen(PORT, () => console.log(`HTTP Server Running on PORT: ${PORT}`));
 }
 
 init();
-

@@ -7,8 +7,8 @@ import { ToastProvider } from "./components/toast-provider";
 import { Navigation } from "./components/navigation";
 import { useState } from "react";
 import { SplashScreen } from "./components/splash-screen";
-//import './globals.css';
-import "./index.css"; 
+import './globals.css';
+// import "./index.css"; 
 
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

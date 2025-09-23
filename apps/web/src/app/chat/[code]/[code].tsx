@@ -2,14 +2,14 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
-import { MessageList } from "../components/chat/message-list";
-import { MessageInput } from "../components/chat/message-input";
-import { Button } from "../components/ui/button";
-import { Card, CardContent } from "../components/ui/card";
+import { MessageList } from "../../components/chat/message-list";
+import { MessageInput } from "../../components/chat/message-input";
+import { Button } from "../../components/ui/button";
+import { Card, CardContent } from "../../components/ui/card";
 import { LogOut } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "../hooks/use-auth";
-import { useToast } from "../hooks/use-toast";
+import { useAuth } from "../../hooks/use-auth";
+import { useToast } from "../../hooks/use-toast";
 
 export default function ChatRoom() {
   const { code } = useParams();

@@ -1,52 +1,162 @@
-import { Server } from "socket.io";
+import { Server, Socket } from "socket.io";
 import Redis from "ioredis";
 import dotenv from "dotenv";
+import jwt from "jsonwebtoken";
+import { Room, RoomMember, Message, GuestSession, User } from "../models";
+import { v4 as uuidv4 } from "uuid"; // npm i uuid for guestId if needed
 
 dotenv.config();
 
-const REDIS_URL = process.env.REDIS_SERVICE_URI || "rediss://default:";
-//console.log(REDIS_URL);
-const pub = new Redis(REDIS_URL); // Redis Publisher
-const sub = new Redis(REDIS_URL); // Redis Subscriber
+const REDIS_URL = process.env.REDIS_SERVICE_URI || "";
+const pub = new Redis(REDIS_URL);
+const sub = new Redis(REDIS_URL);
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+
+sub.psubscribe("messages:*"); // What: Pattern subscribe. Why: Scale to dynamic rooms without per-channel sub. How: pmessage extracts room from channel.
+
+sub.on("pmessage", (pattern, channel, message) => {
+  const roomCode = channel.split(":")[1];
+  io.to(roomCode).emit("message", JSON.parse(message));
+});
+
+let io: Server;
 
 class SocketService {
-    private _io: Server;
+  constructor() {
+    console.log("Socket Server Initialized...");
+    io = new Server({
+      cors: { origin: "*", methods: ["GET", "POST"] },
+    });
+  }
 
-    constructor() {
-        console.log("Socket Server Initialized...");
-        this._io = new Server({
-            cors: { // Add cors to *Socket.io WS Server
-                allowedHeaders: ['*'],
-                origin: "*"
+  get io() {
+    return io;
+  }
+
+  initListeners() {
+    console.log("Socket Listeners Initialized...");
+    io.on("connect", (socket: Socket) => {
+      console.log(`New Socket Connected: ${socket.id}`);
+
+      socket.on("join", async (data: { roomCode: string; token?: string; displayName?: string }) => {
+        let userId: string | undefined;
+        let guestId: string | undefined;
+        let displayName = data.displayName;
+        let isGuest = false;
+
+        const room = await Room.findOne({ code: data.roomCode, isActive: true });
+        if (!room) return socket.emit("error", { message: "Room not found or inactive" });
+
+        const memberCount = await RoomMember.countDocuments({ roomId: room._id, leftAt: null });
+        if (room.type === "p2p" && memberCount >= 2) return socket.emit("error", { message: "P2P room full" });
+
+        if (data.token) {
+          try {
+            const decoded: any = jwt.verify(data.token, JWT_SECRET);
+            if (decoded.type === "guest") {
+              isGuest = true;
+              const session = await GuestSession.findOne({ sessionToken: data.token });
+              if (!session) return socket.emit("error", { message: "Invalid guest session" });
+              if (session.currentRoomId && session.currentRoomId.toString() !== room._id.toString()) {
+                return socket.emit("error", { message: "Leave previous room first" });
+              }
+              displayName = session.displayName;
+              guestId = session._id.toString();
+              session.currentRoomId = room._id;
+              await session.save();
+            } else {
+              const user = await User.findById(decoded.userId);
+              if (!user) return socket.emit("error", { message: "User not found" });
+              displayName = user.name;
+              userId = user._id.toString();
             }
-         }); 
-         sub.subscribe("CHAT_MESSAGES"); // Subscribe to redis channel
-    }
+          } catch (err) {
+            return socket.emit("error", { message: "Invalid token" });
+          }
+        } else {
+          // Create guest
+          displayName = displayName || `Guest_${Math.random().toString(36).substring(2, 7)}`;
+          const sessionToken = jwt.sign({ type: "guest", displayName }, JWT_SECRET, { expiresIn: "24h" });
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const session = new GuestSession({ sessionToken, displayName, expiresAt, currentRoomId: room._id });
+          await session.save();
+          guestId = session._id.toString();
+          isGuest = true;
+          socket.emit("guest-session", { sessionToken }); // Frontend store
+        }
 
-    get io(){
-        return this._io;
-    }
+        // Add/check member
+        const query = { roomId: room._id, leftAt: null, ...(isGuest ? { guestId } : { userId }) };
+        let member = await RoomMember.findOne(query);
+        if (!member) {
+          member = new RoomMember({ roomId: room._id, userId, guestId, displayName });
+          await member.save();
+        }
 
-    public initListeners(){
-        console.log("Socket Listeners Initialized...");
-        const io = this.io;
+        socket.join(data.roomCode);
+        socket.data = { ...socket.data, user: { id: isGuest ? guestId : userId, displayName, isGuest }, roomCode: data.roomCode };
 
-        io.on("connect", (socket) => {
-            console.log(`New Socket Connected : ${socket.id}`);
+        io.to(data.roomCode).emit("user-joined", { displayName, timestamp: new Date().toISOString() });
+        console.log(`${displayName} joined room ${data.roomCode}`);
+      });
 
-            socket.on('event:message', async({ message } : { message: string; }) => { // as we publish to redis so why async func
-                console.log(`New Message Received : ${message}`); // If any message received publish to redis
-                await pub.publish('CHAT_MESSAGES', JSON.stringify({ message })); // -> destruct means msg:msg like that
-            });
-        });
+      socket.on("event:message", async (data: { message: string }) => {
+        const roomCode = socket.data.roomCode;
+        if (!roomCode) return;
+        const room = await Room.findOne({ code: roomCode });
+        if (!room) return;
 
-        sub.on('message', (channel, message) => { // Subscribe to redis channel
-            if(channel === "CHAT_MESSAGES"){ // If any message received from redis publish to all socket clients
-                this.io.emit('message', message); // 
-                console.log(`New Message Published To Clients : ${message}`);
+        const sender = socket.data.user;
+        const msgData = { message: data.message, sender: sender.displayName, timestamp: new Date().toISOString() };
+
+        if (room.preserveHistory) {
+          const message = new Message({
+            roomId: room._id,
+            userId: sender.isGuest ? undefined : sender.id,
+            guestId: sender.isGuest ? sender.id : undefined,
+            content: data.message,
+          });
+          await message.save();
+        }
+
+        await pub.publish(`messages:${roomCode}`, JSON.stringify(msgData));
+        console.log(`Message in ${roomCode}: ${data.message}`);
+      });
+
+      socket.on("leave", async () => {
+        const roomCode = socket.data.roomCode;
+        if (!roomCode) return;
+        const sender = socket.data.user;
+
+        const room = await Room.findOne({ code: roomCode });
+        if (room) {
+          const query = { roomId: room._id, leftAt: null, ...(sender.isGuest ? { guestId: sender.id } : { userId: sender.id }) };
+          const member = await RoomMember.findOne(query);
+          if (member) {
+            member.leftAt = new Date();
+            await member.save();
+          }
+
+          if (sender.isGuest) {
+            const session = await GuestSession.findById(sender.id);
+            if (session) {
+              session.currentRoomId = null;
+              await session.save();
             }
-         });
-    }
+          }
+        }
+
+        io.to(roomCode).emit("user-left", { displayName: sender.displayName, timestamp: new Date().toISOString() });
+        socket.leave(roomCode);
+        socket.data.roomCode = undefined;
+      });
+
+      socket.on("disconnect", () => {
+        console.log(`Socket disconnected: ${socket.id}`);
+        // Optional: Mark left if not already, but skip for reconnections (use heartbeat if needed)
+      });
+    });
+  }
 }
 
 export default SocketService;
