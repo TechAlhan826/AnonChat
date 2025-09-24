@@ -1,103 +1,92 @@
 'use client'
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { MessageList } from "../../components/chat/message-list";
 import { MessageInput } from "../../components/chat/message-input";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { LogOut } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "../../hooks/use-auth";
 import { useToast } from "../../hooks/use-toast";
+import Cookies from 'js-cookie';
 
 export default function ChatRoom() {
-  const { code } = useParams();
+  const { code } = useParams() as { code: string };
   const router = useRouter();
-  const { isGuest, createGuestSession } = useAuth();
   const { toast } = useToast();
   const [hasJoined, setHasJoined] = useState(false);
+  const [roomData, setRoomData] = useState<{ room: any; memberCount: number; members: any[] } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Join room on component mount
   useEffect(() => {
-    const joinRoom = async () => {
-      if (!code || hasJoined) return;
-
+    let token = localStorage.getItem('token'); //Cookies.get('token');
+    const joinAndFetch = async () => {
+      setIsLoading(true);
       try {
-        // Create guest session if needed
-        if (!localStorage.getItem("guestToken") && !localStorage.getItem("authToken")) {
-          await createGuestSession();
+        const headers: HeadersInit = { "Content-Type": "application/json" };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        else {
+          // Create guest session
+          const guestRes = await fetch("http://localhost:5000/api/rooms/create-guest", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ displayName: `Guest_${Math.random().toString(36).substring(2, 7)}` }),
+          });
+          if (!guestRes.ok) throw new Error("Failed to create guest session");
+          const guestData = await guestRes.json();
+          token = guestData.sessionToken;
+          localStorage.setItem('token', token);
+          //Cookies.set('token', token, { expires: 1, secure: true, sameSite: 'strict' });
         }
 
-        const token = localStorage.getItem("authToken") || localStorage.getItem("guestToken");
-        const headers: any = { "Content-Type": "application/json" };
-        if (token) headers.Authorization = `Bearer ${token}`;
-
-        const res = await fetch("/api/rooms/join", {
+        // Join
+        const joinRes = await fetch("http://localhost:5000/api/rooms/join", {
           method: "POST",
           headers,
           body: JSON.stringify({ code: code.toUpperCase() }),
         });
-
-        if (!res.ok) {
-          const error = await res.json();
-          throw new Error(error.message);
+        if (!joinRes.ok) {
+          const errorData = await joinRes.json();
+          throw new Error(errorData.message || "Failed to join room");
         }
 
         setHasJoined(true);
-        toast({
-          title: "Success",
-          description: `Joined room ${code.toUpperCase()}!`,
-        });
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: error instanceof Error ? error.message : "Failed to join room",
-          variant: "destructive",
-        });
+
+        // Fetch room details
+        const roomRes = await fetch(`http://localhost:5000/api/rooms/${code.toUpperCase()}`, { headers });
+        if (!roomRes.ok) throw new Error("Failed to fetch room details");
+        const data = await roomRes.json();
+        setRoomData(data);
+
+        toast({ title: "Success", description: `Joined room ${code.toUpperCase()}!` });
+      } catch (err: any) {
+        toast({ title: "Error", description: err.message || "Failed to join/load room", variant: "destructive" });
         router.push("/");
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    joinRoom();
-  }, [code, hasJoined, createGuestSession, toast, setLocation]);
-
-  const { data: roomData } = useQuery({
-    queryKey: ["/api/rooms/by-code", code],
-    enabled: hasJoined && !!code,
-    queryFn: async () => {
-      const res = await fetch(`/api/rooms/by-code/${code}`);
-      if (!res.ok) throw new Error("Failed to fetch room");
-      return res.json();
-    },
-  });
+    joinAndFetch();
+  }, [code, toast, router]);
 
   const handleLeaveRoom = async () => {
+    const token = Cookies.get('token');
+    if (!token) return router.push("/");
+
     try {
-      const token = localStorage.getItem("authToken") || localStorage.getItem("guestToken");
-      const headers: any = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
-
-      await fetch(`/api/rooms/${roomData?.room?.id}/leave`, {
+      const res = await fetch(`http://localhost:5000/api/rooms/${code}/leave`, {
         method: "POST",
-        headers,
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      toast({
-        title: "Success",
-        description: "Left room successfully",
-      });
+      if (!res.ok) throw new Error("Failed to leave");
+      toast({ title: "Success", description: "Left room successfully" });
       router.push("/");
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to leave room",
-        variant: "destructive",
-      });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to leave room", variant: "destructive" });
     }
   };
 
-  if (!hasJoined) {
+  if (isLoading || !hasJoined) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card>
@@ -110,7 +99,7 @@ export default function ChatRoom() {
     );
   }
 
-  if (!roomData) {
+  if (!roomData || !roomData.room) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card>
@@ -124,7 +113,6 @@ export default function ChatRoom() {
 
   return (
     <div className="h-screen flex flex-col animate-fade-in">
-      {/* Chat Header */}
       <div className="bg-card border-b border-border p-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div>
@@ -132,7 +120,7 @@ export default function ChatRoom() {
               {roomData.room.name || `Room ${roomData.room.code}`}
             </h3>
             <p className="text-sm text-muted-foreground">
-              <span className="room-code font-mono" data-testid="text-room-code">
+              <span data-testid="text-room-code">
                 {roomData.room.code}
               </span>
               {" • "}
@@ -156,7 +144,7 @@ export default function ChatRoom() {
 
       <div className="flex-1 flex flex-col max-w-7xl mx-auto w-full">
         <MessageList room={roomData.room} />
-        <MessageInput roomId={roomData.room.id} />
+        <MessageInput roomId={roomData.room.code} />
       </div>
     </div>
   );

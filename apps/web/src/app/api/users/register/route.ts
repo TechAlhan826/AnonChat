@@ -8,14 +8,14 @@ export async function POST(request: NextRequest){
         const reqBody  = await request.json();
         var { username, email, password } = reqBody
 
-        console.log(reqBody); // remove in PROD
+        //console.log(reqBody); // remove in PROD
 
         await connect();
 
         // check if user already exists
         const euser = await users.findOne({email});
         if(euser){
-            return NextResponse.json({error: "User already exists! !"}, {status: 400});
+            return NextResponse.json({error: "User already exists! !", success: false}, {status: 400});
         }
 
         //hashing of password
@@ -31,10 +31,10 @@ export async function POST(request: NextRequest){
         const savedUser = await newUser.save();
         console.log(savedUser);
 
-        return NextResponse.json({message: "User created successfully !"}, {status: 201});
+        return NextResponse.json({message: "User created successfully !", success: true}, {status: 201});
         
 
     } catch(error: any){
-        return NextResponse.json({error: error.message}, {status: 500});
+        return NextResponse.json({error: error.message, success: false}, {status: 500});
     }
 }

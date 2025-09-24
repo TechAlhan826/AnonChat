@@ -1,42 +1,63 @@
 'use client'
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Checkbox } from "../../components/ui/checkbox";
-import { useAuth } from "../../hooks/use-auth";
+import { useToast } from "../../hooks/use-toast";
+
+const schema = z.object({
+  name: z.string().min(1, "Name required"),
+  email: z.string().email("Invalid email"),
+  password: z.string().min(6, "Password too short"),
+  confirmPassword: z.string(),
+  agreeToTerms: z.boolean().refine(val => val === true, "Must agree to terms"),
+}).refine(data => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+type FormData = z.infer<typeof schema>;
 
 export default function Register() {
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
+  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(schema),
   });
-  const [agreeToTerms, setAgreeToTerms] = useState(false);
-  const { register, isLoading } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { toast } = useToast();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (formData.password !== formData.confirmPassword) {
-      return; // Handle password mismatch
-    }
-
+  const onSubmit = async (data: FormData) => {
+    setIsLoading(true);
     try {
-      await register(formData.name, formData.email, formData.password);
-      router.push("/auth/login");
-    } catch (error) {
-      // Error handled in useAuth hook
-    }
-  };
+      const res = await fetch('/api/users/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: data.name, email: data.email, password: data.password }),
+      });
 
-  const updateFormData = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Registration failed");
+      }
+
+      const resData = await res.json();
+      if (!resData.success) {
+        throw new Error(resData.message || "Registration failed");
+      }
+
+      toast({ title: "Success", description: "Successfully registered!" });
+      router.push("/auth/login");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Registration failed!", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -48,7 +69,7 @@ export default function Register() {
         </div>
         <Card>
           <CardContent className="p-8">
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               <div>
                 <Label htmlFor="name" className="block text-sm font-medium text-foreground mb-2">
                   Full name
@@ -56,12 +77,11 @@ export default function Register() {
                 <Input
                   id="name"
                   type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => updateFormData("name", e.target.value)}
+                  {...register("name")}
                   placeholder="John Doe"
                   data-testid="input-name"
                 />
+                {errors.name && <p className="text-red-500 text-sm">{errors.name.message}</p>}
               </div>
               <div>
                 <Label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
@@ -70,12 +90,11 @@ export default function Register() {
                 <Input
                   id="email"
                   type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => updateFormData("email", e.target.value)}
+                  {...register("email")}
                   placeholder="john@example.com"
                   data-testid="input-email"
                 />
+                {errors.email && <p className="text-red-500 text-sm">{errors.email.message}</p>}
               </div>
               <div>
                 <Label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
@@ -84,12 +103,11 @@ export default function Register() {
                 <Input
                   id="password"
                   type="password"
-                  required
-                  value={formData.password}
-                  onChange={(e) => updateFormData("password", e.target.value)}
+                  {...register("password")}
                   placeholder="••••••••"
                   data-testid="input-password"
                 />
+                {errors.password && <p className="text-red-500 text-sm">{errors.password.message}</p>}
               </div>
               <div>
                 <Label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground mb-2">
@@ -98,19 +116,16 @@ export default function Register() {
                 <Input
                   id="confirmPassword"
                   type="password"
-                  required
-                  value={formData.confirmPassword}
-                  onChange={(e) => updateFormData("confirmPassword", e.target.value)}
+                  {...register("confirmPassword")}
                   placeholder="••••••••"
                   data-testid="input-confirm-password"
                 />
+                {errors.confirmPassword && <p className="text-red-500 text-sm">{errors.confirmPassword.message}</p>}
               </div>
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="terms"
-                  required
-                  checked={agreeToTerms}
-                  onCheckedChange={(checked) => setAgreeToTerms(checked as boolean)}
+                  {...register("agreeToTerms")}
                   data-testid="checkbox-terms"
                 />
                 <Label htmlFor="terms" className="text-sm text-muted-foreground">
@@ -124,10 +139,11 @@ export default function Register() {
                   </a>
                 </Label>
               </div>
+              {errors.agreeToTerms && <p className="text-red-500 text-sm">{errors.agreeToTerms.message}</p>}
               <Button
                 type="submit"
                 className="w-full"
-                disabled={isLoading || !agreeToTerms}
+                disabled={isLoading}
                 data-testid="button-submit"
               >
                 {isLoading ? "Creating account..." : "Create account"}

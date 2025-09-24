@@ -1,6 +1,5 @@
 'use client'
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogIn, Plus, Shield, Zap, Users } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -8,9 +7,8 @@ import { Card, CardContent } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
-import { useAuth } from "./hooks/use-auth";
 import { useToast } from "./hooks/use-toast";
-import { apiRequest } from "./lib/queryClient";
+import Cookies from 'js-cookie';
 
 export default function Home() {
   const [roomCode, setRoomCode] = useState("");
@@ -18,110 +16,68 @@ export default function Home() {
   const [roomType, setRoomType] = useState("group");
   const [isJoining, setIsJoining] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const { isAuthenticated, createGuestSession } = useAuth();
-  const { toast } = useToast();
   const router = useRouter();
+  const { toast } = useToast();
 
-  const handleJoinRoom = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (roomCode.length !== 6) {
-      toast({
-        title: "Error",
-        description: "Please enter a valid 6-character room code",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const joinRoom = async (code: string) => {
+    if (code.length !== 6) return toast({ title: "Error", description: "Invalid code length", variant: "destructive" });
     setIsJoining(true);
     try {
-      const token = localStorage.getItem("authToken") || localStorage.getItem("guestToken");
-      const headers: any = { "Content-Type": "application/json" };
+      const token = Cookies.get('token');
+      const headers: HeadersInit = { "Content-Type": "application/json" };
       if (token) headers.Authorization = `Bearer ${token}`;
 
-      const res = await fetch("/api/rooms/join", {
+      const res = await fetch("http://localhost:5000/api/rooms/join", {
         method: "POST",
         headers,
-        body: JSON.stringify({ code: roomCode.toUpperCase() }),
+        body: JSON.stringify({ code }),
       });
 
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message);
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to join");
       }
 
+      // If guest, backend returns sessionToken? Set if present.
       const data = await res.json();
-      toast({
-        title: "Success",
-        description: `Joined room ${roomCode.toUpperCase()}!`,
-      });
-      
-      if (isAuthenticated) {
-        router.push("/dashboard");
-      } else {
-        router.push(`/chat/${roomCode.toUpperCase()}`);
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to join room",
-        variant: "destructive",
-      });
+      if (data.sessionToken) Cookies.set('token', data.sessionToken, { expires: 1, secure: true, sameSite: 'strict' });
+
+      toast({ title: "Success", description: `Joined room ${code}!` });
+      router.push(`/chat/${code}`);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setIsJoining(false);
     }
   };
 
-  const handleCreateRoom = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const createRoom = async () => {
     setIsCreating(true);
-
     try {
-      let endpoint = "/api/rooms/create";
-      let headers: any = { "Content-Type": "application/json" };
-      
-      if (isAuthenticated) {
-        const token = localStorage.getItem("authToken");
-        if (token) headers.Authorization = `Bearer ${token}`;
-      } else {
-        endpoint = "/api/rooms/create-guest";
-        // Create guest session if not exists
-        if (!localStorage.getItem("guestToken")) {
-          await createGuestSession();
-        }
+      const token = Cookies.get('token');
+      let endpoint = "http://localhost:5000/api/rooms/create-guest";  // Always guest for home; backend handles.
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (token) {
+        endpoint = "http://localhost:5000/api/rooms/create";
+        headers.Authorization = `Bearer ${token}`;
       }
 
       const res = await fetch(endpoint, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          name: roomName || undefined,
-          type: roomType,
-        }),
+        body: JSON.stringify({ type: roomType, name: roomName }),  // Add name if backend supports.
       });
 
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message);
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to create");
       }
 
-      const room = await res.json();
-      toast({
-        title: "Success",
-        description: `Room created! Code: ${room.code}`,
-      });
-
-      if (isAuthenticated) {
-        router.push("/dashboard");
-      } else {
-        router.push(`/chat/${room.code}`);
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create room",
-        variant: "destructive",
-      });
+      const data = await res.json();
+      toast({ title: "Success", description: `Room created! Code: ${data.code}` });
+      router.push(`/chat/${data.code}`);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setIsCreating(false);
     }
@@ -146,7 +102,13 @@ export default function Home() {
                 <h3 className="text-xl font-semibold text-foreground mb-2">Join Room</h3>
                 <p className="text-muted-foreground">Enter a 6-character room code to join existing conversations</p>
               </div>
-              <form onSubmit={handleJoinRoom} className="space-y-4">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  joinRoom(roomCode);
+                }}
+                className="space-y-4"
+              >
                 <div>
                   <Label htmlFor="roomCode" className="block text-sm font-medium text-foreground mb-2">
                     Room Code
@@ -157,14 +119,14 @@ export default function Home() {
                     maxLength={6}
                     placeholder="ABC123"
                     value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                    onChange={(e) => setRoomCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
                     className="room-code text-center text-lg tracking-wider font-mono"
                     data-testid="input-room-code"
                   />
                 </div>
-                <Button 
-                  type="submit" 
-                  className="w-full" 
+                <Button
+                  type="submit"
+                  className="w-full"
                   disabled={isJoining || roomCode.length !== 6}
                   data-testid="button-join-room"
                 >
@@ -184,7 +146,13 @@ export default function Home() {
                 <h3 className="text-xl font-semibold text-foreground mb-2">Create Room</h3>
                 <p className="text-muted-foreground">Start a new conversation and invite others with a shareable code</p>
               </div>
-              <form onSubmit={handleCreateRoom} className="space-y-4">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  createRoom();
+                }}
+                className="space-y-4"
+              >
                 <div>
                   <Label htmlFor="roomName" className="block text-sm font-medium text-foreground mb-2">
                     Room Name (Optional)
@@ -212,9 +180,9 @@ export default function Home() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button 
-                  type="submit" 
-                  className="w-full" 
+                <Button
+                  type="submit"
+                  className="w-full"
                   variant="secondary"
                   disabled={isCreating}
                   data-testid="button-create-room"

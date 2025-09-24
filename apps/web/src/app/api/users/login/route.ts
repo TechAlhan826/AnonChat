@@ -10,19 +10,19 @@ export async function POST(request: NextRequest){
         var { email, password } = reqBody;
 
 
-        console.log(reqBody); // remove in PROD 
+        //console.log(reqBody); // remove in PROD 
 
         await connect();
 
         const euser = await users.findOne({ email });
 
         if(!euser){
-        return NextResponse.json({message: "Invalid Email or User Does Not Exist !"}, {status: 400});
+        return NextResponse.json({message: "Invalid Email or User Does Not Exist !", success: false}, {status: 400});
         }
 
         const verifyPass = await bcryptjs.compare(password, euser.password);
         if(!verifyPass){
-            return NextResponse.json({message: "Invalid Password !"}, {status: 401});
+            return NextResponse.json({message: "Invalid Password !", success: false}, {status: 401});
         }
 
         const td = { id: euser._id, username: euser.username, email: euser.email};
@@ -33,6 +33,6 @@ export async function POST(request: NextRequest){
         return resp;
 
     } catch(error: any){
-        return NextResponse.json({error: error.message}, {status: 500});
+        return NextResponse.json({error: error.message, success: false }, {status: 500});
     }
 }

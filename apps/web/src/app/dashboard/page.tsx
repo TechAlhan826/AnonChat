@@ -1,77 +1,92 @@
 'use client'
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useToast } from "../hooks/use-toast";
+import Cookies from 'js-cookie';
 import { Sidebar } from "../components/chat/sidebar";
 import { MessageList } from "../components/chat/message-list";
 import { MessageInput } from "../components/chat/message-input";
-import { useAuth } from "../hooks/use-auth";
-import { auth } from "../lib/auth";
 
 interface Room {
-  id: string;
+  _id: string;  // Backend uses _id
   code: string;
-  name?: string;
-  type: string;
+  type: 'p2p' | 'group';
   memberCount: number;
-  lastMessage?: any;
+  lastMessage: string | null;
+  // Add more if backend returns
 }
 
 export default function Dashboard() {
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
-  const { isAuthenticated } = useAuth();
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [selectedRoomCode, setSelectedRoomCode] = useState<string | null>(null);  // Use code for selection
+  const [isLoadingRooms, setIsLoadingRooms] = useState(true);
+  const [selectedRoom, setSelectedRoom] = useState<any>(null);  // Full room data
   const router = useRouter();
-
-  const { data: rooms, isLoading: isLoadingRooms } = useQuery({
-    queryKey: ["/api/rooms/my-rooms"],
-    enabled: isAuthenticated,
-    queryFn: async () => {
-      const token = auth.getToken();
-      const res = await fetch("/api/rooms/my-rooms", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) throw new Error("Failed to fetch rooms");
-      return res.json();
-    },
-  });
-
-  const { data: selectedRoom } = useQuery({
-    queryKey: ["/api/rooms", selectedRoomId],
-    enabled: !!selectedRoomId,
-    queryFn: async () => {
-      const res = await fetch(`/api/rooms/${selectedRoomId}`);
-      if (!res.ok) throw new Error("Failed to fetch room");
-      return res.json();
-    },
-  });
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    const token = localStorage.getItem('token'); //Cookies.get('token');
+    if (!token) {
       router.push("/auth/login");
+      return;
     }
-  }, [isAuthenticated, router]);
 
-  if (!isAuthenticated) {
-    return null;
-  }
+    const fetchRooms = async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/rooms/my-rooms", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error("Failed to fetch rooms");
+        const data = await res.json();
+        setRooms(data);  // Assume array of rooms
+      } catch (err: any) {
+        toast({ title: "Error", description: err.message || "Failed to load rooms", variant: "destructive" });
+        if (err.message.includes("Invalid token")) {
+          Cookies.remove('token');
+          router.push("/auth/login");
+        }
+      } finally {
+        setIsLoadingRooms(false);
+      }
+    };
+
+    fetchRooms();
+  }, [router, toast]);
+
+  useEffect(() => {
+    if (!selectedRoomCode) return;
+
+    const fetchSelectedRoom = async () => {
+      const token = Cookies.get('token');
+      try {
+        const res = await fetch(`http://localhost:5000/api/rooms/${selectedRoomCode}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error("Failed to fetch room");
+        const data = await res.json();
+        setSelectedRoom(data);  // {room, memberCount, members}
+      } catch (err: any) {
+        toast({ title: "Error", description: err.message || "Failed to load room", variant: "destructive" });
+      }
+    };
+
+    fetchSelectedRoom();
+  }, [selectedRoomCode, toast]);
 
   return (
     <div className="flex h-screen animate-fade-in">
       <Sidebar
-        rooms={rooms || []}
-        selectedRoomId={selectedRoomId}
-        onSelectRoom={setSelectedRoomId}
+        rooms={rooms}
+        selectedRoomId={selectedRoomCode}
+        onSelectRoom={setSelectedRoomCode}
         isLoading={isLoadingRooms}
       />
       
       <div className="flex-1 flex flex-col">
-        {selectedRoomId && selectedRoom ? (
+        {selectedRoomCode && selectedRoom ? (
           <>
             <MessageList room={selectedRoom.room} />
-            <MessageInput roomId={selectedRoomId} />
+            <MessageInput roomId={selectedRoom.room.code} />  // Use code or _id if backend expects id
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center bg-muted/20">

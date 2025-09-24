@@ -3,7 +3,6 @@ import Redis from "ioredis";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
 import { Room, RoomMember, Message, GuestSession, User } from "../models";
-import { v4 as uuidv4 } from "uuid"; // npm i uuid for guestId if needed
 
 dotenv.config();
 
@@ -12,7 +11,7 @@ const pub = new Redis(REDIS_URL);
 const sub = new Redis(REDIS_URL);
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
-sub.psubscribe("messages:*"); // What: Pattern subscribe. Why: Scale to dynamic rooms without per-channel sub. How: pmessage extracts room from channel.
+sub.psubscribe("messages:*");
 
 sub.on("pmessage", (pattern, channel, message) => {
   const roomCode = channel.split(":")[1];
@@ -74,7 +73,6 @@ class SocketService {
             return socket.emit("error", { message: "Invalid token" });
           }
         } else {
-          // Create guest
           displayName = displayName || `Guest_${Math.random().toString(36).substring(2, 7)}`;
           const sessionToken = jwt.sign({ type: "guest", displayName }, JWT_SECRET, { expiresIn: "24h" });
           const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -82,10 +80,9 @@ class SocketService {
           await session.save();
           guestId = session._id.toString();
           isGuest = true;
-          socket.emit("guest-session", { sessionToken }); // Frontend store
+          socket.emit("guest-session", { sessionToken });
         }
 
-        // Add/check member
         const query = { roomId: room._id, leftAt: null, ...(isGuest ? { guestId } : { userId }) };
         let member = await RoomMember.findOne(query);
         if (!member) {
@@ -96,7 +93,7 @@ class SocketService {
         socket.join(data.roomCode);
         socket.data = { ...socket.data, user: { id: isGuest ? guestId : userId, displayName, isGuest }, roomCode: data.roomCode };
 
-        io.to(data.roomCode).emit("user-joined", { displayName, timestamp: new Date().toISOString() });
+        io.to(data.roomCode).emit("user-joined", { user: socket.data.user, timestamp: new Date().toISOString() });
         console.log(`${displayName} joined room ${data.roomCode}`);
       });
 
@@ -107,7 +104,7 @@ class SocketService {
         if (!room) return;
 
         const sender = socket.data.user;
-        const msgData = { message: data.message, sender: sender.displayName, timestamp: new Date().toISOString() };
+        const msgData = { message: data.message, sender, timestamp: new Date().toISOString() };
 
         if (room.preserveHistory) {
           const message = new Message({
@@ -120,7 +117,7 @@ class SocketService {
         }
 
         await pub.publish(`messages:${roomCode}`, JSON.stringify(msgData));
-        console.log(`Message in ${roomCode}: ${data.message}`);
+        console.log(`Message in ${roomCode} from ${sender.displayName}: ${data.message}`);
       });
 
       socket.on("leave", async () => {
@@ -146,14 +143,13 @@ class SocketService {
           }
         }
 
-        io.to(roomCode).emit("user-left", { displayName: sender.displayName, timestamp: new Date().toISOString() });
+        io.to(roomCode).emit("user-left", { user: sender, timestamp: new Date().toISOString() });
         socket.leave(roomCode);
         socket.data.roomCode = undefined;
       });
 
       socket.on("disconnect", () => {
         console.log(`Socket disconnected: ${socket.id}`);
-        // Optional: Mark left if not already, but skip for reconnections (use heartbeat if needed)
       });
     });
   }

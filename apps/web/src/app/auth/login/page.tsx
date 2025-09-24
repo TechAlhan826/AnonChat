@@ -1,30 +1,68 @@
 'use client'
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Checkbox } from "../../components/ui/checkbox";
-import { useAuth } from "../../hooks/use-auth";
+import { useToast } from "../../hooks/use-toast";
+import Cookies from 'js-cookie';
+
+const schema = z.object({
+  email: z.string().email("Invalid email"),
+  password: z.string().min(6, "Password too short"),
+  rememberMe: z.boolean().optional(),
+});
+
+type FormData = z.infer<typeof schema>;
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(schema),
+    defaultValues: { rememberMe: false },
+  });
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-  const { login, isLoading } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { toast } = useToast();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (data: FormData) => {
+    setIsLoading(true);
     try {
-      await login(email, password);
-      router.push("/dashboard");
-    } catch (error) {
-      // Error handled in useAuth hook
+      const res = await fetch('/api/users/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: data.email, password: data.password }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Invalid credentials");
+      }
+
+      const resData = await res.json();
+      if (!resData.success) {
+        throw new Error(resData.message || "Invalid credentials");
+      }
+
+      // Store in cookie: Secure, sameSite to prevent CSRF; expires based on rememberMe.
+      Cookies.set('token', resData.token, {
+        expires: data.rememberMe ? 7 : 1,  // Days; session if false.
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+      });
+
+      toast({ title: "Success", description: "Successfully logged in!" });
+      router.push('/dashboard');
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Login failed!", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -37,7 +75,7 @@ export default function Login() {
         </div>
         <Card>
           <CardContent className="p-8">
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               <div>
                 <Label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
                   Email address
@@ -45,12 +83,11 @@ export default function Login() {
                 <Input
                   id="email"
                   type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  {...register("email")}
                   placeholder="john@example.com"
                   data-testid="input-email"
                 />
+                {errors.email && <p className="text-red-500 text-sm">{errors.email.message}</p>}
               </div>
               <div>
                 <Label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
@@ -60,9 +97,7 @@ export default function Login() {
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    {...register("password")}
                     placeholder="••••••••"
                     className="pr-12"
                     data-testid="input-password"
@@ -82,13 +117,13 @@ export default function Login() {
                     )}
                   </Button>
                 </div>
+                {errors.password && <p className="text-red-500 text-sm">{errors.password.message}</p>}
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="remember"
-                    checked={rememberMe}
-                    onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                    {...register("rememberMe")}
                     data-testid="checkbox-remember"
                   />
                   <Label htmlFor="remember" className="text-sm text-muted-foreground">
