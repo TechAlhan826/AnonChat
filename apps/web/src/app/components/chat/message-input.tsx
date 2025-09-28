@@ -1,29 +1,30 @@
 import { useState, useEffect } from 'react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
-import { useSocket } from '../../../context/SocketProvider'; // '../../hooks/use-socket';
+import { useSocket } from '../../../context/SocketProvider';
 
 interface MessageInputProps {
   roomId: string;  // code
+  value: string;
+  onChange: (e: string) => void;
+  onSend: () => void;
+  disabled: boolean;
 }
 
-export const MessageInput = ({ roomId }: MessageInputProps) => {
-  const { sendMessage, startTyping, stopTyping } = useSocket();
-  const [msg, setMsg] = useState('');
+export const MessageInput = ({ roomId, value, onChange, onSend, disabled }: MessageInputProps) => {
+  const { sendTyping } = useSocket();
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const handleTyping = () => {
-    startTyping();
+    sendTyping(true, roomId);
     if (typingTimeout) clearTimeout(typingTimeout);
-    const timeout = setTimeout(stopTyping, 2000);
+    const timeout = setTimeout(() => sendTyping(false, roomId), 2000);
     setTypingTimeout(timeout);
   };
 
-  const handleSend = () => {
-    if (!msg.trim()) return;
-    sendMessage(msg);
-    setMsg('');
-    stopTyping();
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') onSend();
+    else handleTyping();
   };
 
   useEffect(() => {
@@ -35,15 +36,13 @@ export const MessageInput = ({ roomId }: MessageInputProps) => {
   return (
     <div className="p-4 border-t border-border flex items-center space-x-2">
       <Input
-        value={msg}
-        onChange={e => setMsg(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') handleSend();
-          else handleTyping();
-        }}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={handleKeyDown}
         placeholder="Type a message..."
+        disabled={disabled}
       />
-      <Button onClick={handleSend}>Send</Button>
+      <Button onClick={onSend} disabled={disabled}>Send</Button>
     </div>
   );
 };

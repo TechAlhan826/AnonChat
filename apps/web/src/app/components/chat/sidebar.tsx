@@ -16,24 +16,21 @@ interface SidebarProps {
   isLoading: boolean;
 }
 
-export const Sidebar = ({ rooms, selectedRoomCode, onSelectRoom, isLoading }: SidebarProps) => {
-  if (isLoading) return <div>Loading rooms...</div>;
+// Example; add delete button if room.createdBy === userId
+export function Sidebar({ rooms, selectedRoomId, onSelectRoom, isLoading, onDeleteRoom, userId }) {
+  if (isLoading) return <div>Loading...</div>;
 
   return (
-    <aside className="w-64 bg-gray-100 p-4 overflow-y-auto">
-      <h2 className="text-lg font-bold mb-4">My Rooms</h2>
-      {rooms.length === 0 ? <p>No rooms joined</p> : rooms.map(room => (
-        <motion.button
-          key={room.code}
-          onClick={() => onSelectRoom(room.code)}
-          className={`w-full text-left p-2 mb-2 rounded ${selectedRoomCode === room.code ? 'bg-blue-200' : 'hover:bg-gray-200'}`}
-          whileHover={{ scale: 1.02 }}
-        >
-          <div className="font-semibold">{room.type.toUpperCase()} - {room.code}</div>
-          <div className="text-sm">Members: {room.memberCount}</div>
-          <div className="text-sm truncate">{room.lastMessage || 'No messages'}</div>
-        </motion.button>
+    <aside className="w-64 bg-gray-100 p-4">
+      <h2>My Rooms</h2>
+      {rooms.map(room => (
+        <div key={room.code}>
+          <button onClick={() => onSelectRoom(room.code)}>
+            {room.type} - {room.code} ({room.memberCount})
+          </button>
+          {room.createdBy === userId && <Button onClick={() => onDeleteRoom(room.code)}>Delete</Button>}
+        </div>
       ))}
     </aside>
   );
-};
+}

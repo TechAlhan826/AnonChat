@@ -11,6 +11,7 @@ interface Message {
 
 interface SocketContextI {
   sendMessage: (msg: string, roomCode: string) => void;
+  addMessage: (msg: Message, roomCode: string) => void;
   messages: { [roomCode: string]: Message[] };
   joinRoom: (roomCode: string) => void;
   leaveRoom: (roomCode: string) => void;
@@ -19,9 +20,9 @@ interface SocketContextI {
   isConnected: boolean;
 }
 
-// Default value to avoid !state error; empty but typed.
 const defaultContext: SocketContextI = {
   sendMessage: () => {},
+  addMessage: () => {},
   messages: {},
   joinRoom: () => {},
   leaveRoom: () => {},
@@ -46,37 +47,35 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const reconnectAttempts = React.useRef(0);
   const maxReconnectAttempts = 5;
 
-  // Message receive: Parse, append to room's messages.
-  const onMessageReceived = useCallback((data: any) => {
-    const { message, roomCode, sender, timestamp } = data;  // Backend must send these.
-    if (!roomCode) return;
+  const addMessage = useCallback((msg: Message, roomCode: string) => {
     setMessages((prev) => ({
       ...prev,
-      [roomCode]: [...(prev[roomCode] || []), { content: message, sender, timestamp }],
+      [roomCode]: [...(prev[roomCode] || []), msg],
     }));
-    console.log(`New Message in ${roomCode}: ${message}`);
   }, []);
 
-  // User joined/left: Could add to messages as system msg.
+  const onMessageReceived = useCallback((data: any) => {
+    const { message, roomCode, sender, timestamp } = data;
+    if (!roomCode) return;
+    addMessage({ content: message, sender, timestamp }, roomCode);
+    console.log(`New Message in ${roomCode}: ${message}`);
+  }, [addMessage]);
+
   const onUserJoined = useCallback((data: any) => {
     const { user, roomCode, timestamp } = data;
-    setMessages((prev) => ({
-      ...prev,
-      [roomCode]: [...(prev[roomCode] || []), { content: `${user} joined`, sender: 'system', timestamp }],
-    }));
-  }, []);
+    if (user === (Cookies.get('token') ? 'User' : 'Guest')) return;  // Exclude self
+    addMessage({ content: `${user} joined`, sender: 'system', timestamp }, roomCode);
+  }, [addMessage]);
 
   const onUserLeft = useCallback((data: any) => {
     const { user, roomCode, timestamp } = data;
-    setMessages((prev) => ({
-      ...prev,
-      [roomCode]: [...(prev[roomCode] || []), { content: `${user} left`, sender: 'system', timestamp }],
-    }));
-  }, []);
+    if (user === (Cookies.get('token') ? 'User' : 'Guest')) return;  // Exclude self
+    addMessage({ content: `${user} left`, sender: 'system', timestamp }, roomCode);
+  }, [addMessage]);
 
-  // Typing: Add/remove user to room's typing list.
   const onUserTyping = useCallback((data: any) => {
     const { user, isTyping, roomCode } = data;
+    if (user === (Cookies.get('token') ? 'User' : 'Guest')) return;  // Exclude self
     setTypingUsers((prev) => {
       const users = new Set(prev[roomCode] || []);
       if (isTyping) users.add(user);
@@ -86,11 +85,11 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    const token = Cookies.get('token');
+    const token = Cookies.get('token') || localStorage.getItem('token_fallback');
     const _socket = io("http://localhost:5000", {
-      auth: { token },  // Secure: Send for backend verify.
+      auth: { token },
       reconnection: true,
-      reconnectionAttempts: Infinity,  // Auto, but limit manual.
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
     });
@@ -110,7 +109,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       console.error('Connect error:', err);
       if (reconnectAttempts.current < maxReconnectAttempts) {
         reconnectAttempts.current++;
-        setTimeout(() => _socket.connect(), Math.pow(2, reconnectAttempts.current) * 1000);  // Backoff.
+        setTimeout(() => _socket.connect(), Math.pow(2, reconnectAttempts.current) * 1000);
       }
     });
 
@@ -141,7 +140,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const joinRoom = useCallback((roomCode: string) => {
     if (socket && roomCode) {
       socket.emit('join', { roomCode });
-      // Init room messages if not.
       setMessages((prev) => ({ ...prev, [roomCode]: prev[roomCode] || [] }));
       setTypingUsers((prev) => ({ ...prev, [roomCode]: prev[roomCode] || [] }));
     }
@@ -150,7 +148,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const leaveRoom = useCallback((roomCode: string) => {
     if (socket && roomCode) {
       socket.emit('leave', { roomCode });
-      // Optional: Clear room messages on leave to save memory.
     }
   }, [socket]);
 
@@ -162,6 +159,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
   const value: SocketContextI = {
     sendMessage,
+    addMessage,
     messages,
     joinRoom,
     leaveRoom,

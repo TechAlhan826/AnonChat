@@ -146,4 +146,13 @@ router.put("/:code/preserve", authenticate, asyncHandler(async (req: Request, re
   res.json(room);
 }));
 
+router.post("/:code/delete", authenticate, asyncHandler(async (req, res) => {
+  const room = await Room.findOne({ code: req.params.code });
+  if (!room || room.createdBy?.toString() !== req.user!.id) return res.status(403).json({ message: "Not authorized" });
+  await Room.deleteOne({ _id: room._id });
+  await RoomMember.deleteMany({ roomId: room._id });
+  await Message.deleteMany({ roomId: room._id });
+  res.json({ message: "Room deleted" });
+}));
+
 export { router as roomsRouter };

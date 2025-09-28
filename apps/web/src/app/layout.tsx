@@ -1,36 +1,36 @@
-'use client'
+import type { Metadata } from "next";
+//import localFont from "next/font/local";
+import "./globals.css";
+import { SocketProvider } from "../context/SocketProvider";
+import { Header } from "./components/Header";  // New
 
-import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "./lib/queryClient";
-import { ThemeProvider } from "./components/theme-provider";
-import { ToastProvider } from "./components/toast-provider";
-import { Navigation } from "./components/navigation";
-import { useState } from "react";
-import { SplashScreen } from "./components/splash-screen";
-import './globals.css';
-// import "./index.css"; 
+// const geistSans = localFont({
+//   src: "./fonts/GeistVF.woff",
+//   variable: "--font-geist-sans",
+// });
+// const geistMono = localFont({
+//   src: "./fonts/GeistMonoVF.woff",
+//   variable: "--font-geist-mono",
+// });  className={`${geistSans.variable} ${geistMono.variable}`}
 
+export const metadata: Metadata = {
+  title: "AnonChat",
+  description: "Anonymous chat app",
+};
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const [showSplash, setShowSplash] = useState(true);
-
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="en">
-      <body>
-        <QueryClientProvider client={queryClient}>
-          <ThemeProvider defaultTheme="light">
-            {showSplash ? (
-              <SplashScreen onComplete={() => setShowSplash(false)} />
-            ) : (
-              <div className="min-h-screen bg-background text-foreground">
-                <Navigation />
-                {children} {/* Next renders the current page here */}
-              </div>
-            )}
-            <ToastProvider />
-          </ThemeProvider>
-        </QueryClientProvider>
-      </body>
+      <SocketProvider>
+        <body>
+          <Header />  // New
+          {children}
+        </body>
+      </SocketProvider>
     </html>
   );
 }

@@ -1,57 +1,60 @@
 import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { useSocket } from '../../../context/SocketProvider'; // '../../hooks/use-socket';
-import Cookies from 'js-cookie';
 import DOMPurify from 'dompurify';
 
-interface MessageListProps {
-  room: any;  // From roomData.room
+interface Message {
+  content: string;
+  sender: string;
+  timestamp: string;
 }
 
-export const MessageList = ({ room }: MessageListProps) => {
-  const { messages, typingUsers } = useSocket();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+interface MessageListProps {
+  room: any;
+  messages: Message[];
+  currentUserId: string;
+  currentUserName: string;
+}
+
+function getColorForSender(sender: string) {
+  let hash = 0;
+  for (let i = 0; i < sender.length; i++) {
+    hash = sender.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const color = `hsl(${hash % 360}, 70%, 70%)`;
+  return color;
+}
+
+export const MessageList = ({ room, messages, currentUserId, currentUserName }: MessageListProps) => {
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const token = Cookies.get('token');
-    const fetchHistory = async () => {
-      if (!room.preserveHistory) return;
-      try {
-        const res = await fetch(`http://localhost:5000/api/rooms/${room.code}/messages`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error("Failed to fetch history");
-        const history = await res.json();
-        // Append to messages via set, but since socket has state, assume provider merges
-      } catch (err) {
-        console.error(err);
-      }
-    };
-
-    fetchHistory();
-  }, [room.code]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    listRef.current?.scrollTo(0, listRef.current.scrollHeight);
   }, [messages]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4">
-      {messages.map((msg, i) => (
-        <motion.div
-          key={i}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className={`mb-2 ${msg.sender === 'System' ? 'text-gray-500' : ''}`}
-        >
-          <span className="font-bold">{msg.sender}:</span> <span dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.message) }} />
-          <span className="text-xs text-gray-400 ml-2">{msg.timestamp}</span>
-        </motion.div>
-      ))}
-      {typingUsers.length > 0 && (
-        <div className="text-sm text-gray-500">{typingUsers.join(', ')} {typingUsers.length > 1 ? 'are' : 'is'} typing...</div>
-      )}
-      <div ref={messagesEndRef} />
+    <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+      {messages.map((msg, i) => {
+        const isSent = msg.sender === currentUserName;
+        const isSystem = msg.sender === 'system';
+        const bgColor = isSystem ? 'bg-gray-200 text-gray-800' : isSent ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800';
+        const align = isSent ? 'ml-auto' : 'mr-auto';
+        const senderColor = getColorForSender(msg.sender);
+
+        return (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`max-w-[80%] rounded-lg p-3 shadow ${bgColor} ${align}`}
+          >
+            {!isSystem && room.type === 'group' && !isSent && (
+              <span style={{ color: senderColor }} className="font-bold block mb-1">{msg.sender}</span>
+            )}
+            <span dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.content) }} />
+            <span className="text-xs opacity-70 block mt-1">{new Date(msg.timestamp).toLocaleTimeString()}</span>
+          </motion.div>
+        );
+      })}
     </div>
   );
 };
