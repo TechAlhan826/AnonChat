@@ -6,6 +6,7 @@ import SocketService from "./services/socket";
 import { roomsRouter } from "./routes/rooms";
 import { usersRouter } from "./routes/users";
 import cors from "cors";
+import "./remove-console-prod";
 
 dotenv.config();
 
