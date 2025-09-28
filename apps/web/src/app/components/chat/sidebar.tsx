@@ -16,8 +16,7 @@ interface SidebarProps {
   isLoading: boolean;
 }
 
-// Example; add delete button if room.createdBy === userId
-export function Sidebar({ rooms, selectedRoomId, onSelectRoom, isLoading, onDeleteRoom, userId }) {
+export function Sidebar({ rooms, selectedRoomCode, onSelectRoom, isLoading }: SidebarProps) {
   if (isLoading) return <div>Loading...</div>;
 
   return (
@@ -25,10 +24,12 @@ export function Sidebar({ rooms, selectedRoomId, onSelectRoom, isLoading, onDele
       <h2>My Rooms</h2>
       {rooms.map(room => (
         <div key={room.code}>
-          <button onClick={() => onSelectRoom(room.code)}>
+          <button
+            className={room.code === selectedRoomCode ? 'font-bold' : ''}
+            onClick={() => onSelectRoom(room.code)}
+          >
             {room.type} - {room.code} ({room.memberCount})
           </button>
-          {room.createdBy === userId && <Button onClick={() => onDeleteRoom(room.code)}>Delete</Button>}
         </div>
       ))}
     </aside>

@@ -1,7 +1,8 @@
 'use client'
-import React, { useEffect, useState, useCallback, useContext } from "react";
+import React, { useEffect, useState, useCallback, useContext, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import Cookies from 'js-cookie';
+import { jwtDecode } from "jwt-decode";
 
 interface Message {
   content: string;
@@ -44,8 +45,24 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const [messages, setMessages] = useState<{ [roomCode: string]: Message[] }>({});
   const [typingUsers, setTypingUsers] = useState<{ [roomCode: string]: string[] }>({});
   const [isConnected, setIsConnected] = useState(false);
-  const reconnectAttempts = React.useRef(0);
+  const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
+  const currentUserName = useRef<string>('');
+
+  // Get current user name from token
+  useEffect(() => {
+    const token = Cookies.get('token');
+    if (token) {
+      try {
+        const decoded: any = jwtDecode(token);
+        currentUserName.current = decoded.name || 'User';
+      } catch {
+        currentUserName.current = 'Guest';
+      }
+    } else {
+      currentUserName.current = 'Guest';
+    }
+  }, []);
 
   const addMessage = useCallback((msg: Message, roomCode: string) => {
     setMessages((prev) => ({
@@ -57,41 +74,50 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const onMessageReceived = useCallback((data: any) => {
     const { message, roomCode, sender, timestamp } = data;
     if (!roomCode) return;
+    
+    // Always add received messages (including our own echoed back)
     addMessage({ content: message, sender, timestamp }, roomCode);
-    console.log(`New Message in ${roomCode}: ${message}`);
+    console.log(`New Message in ${roomCode}: ${message} from ${sender}`);
   }, [addMessage]);
 
   const onUserJoined = useCallback((data: any) => {
     const { user, roomCode, timestamp } = data;
-    if (user === (Cookies.get('token') ? 'User' : 'Guest')) return;  // Exclude self
+    // Don't exclude self - let the message show for all joins
     addMessage({ content: `${user} joined`, sender: 'system', timestamp }, roomCode);
   }, [addMessage]);
 
   const onUserLeft = useCallback((data: any) => {
     const { user, roomCode, timestamp } = data;
-    if (user === (Cookies.get('token') ? 'User' : 'Guest')) return;  // Exclude self
+    // Don't exclude self - let the message show for all leaves
     addMessage({ content: `${user} left`, sender: 'system', timestamp }, roomCode);
   }, [addMessage]);
 
   const onUserTyping = useCallback((data: any) => {
     const { user, isTyping, roomCode } = data;
-    if (user === (Cookies.get('token') ? 'User' : 'Guest')) return;  // Exclude self
+    // Exclude self for typing indicators
+    if (user === currentUserName.current) return;
+    
     setTypingUsers((prev) => {
       const users = new Set(prev[roomCode] || []);
-      if (isTyping) users.add(user);
-      else users.delete(user);
+      if (isTyping) {
+        users.add(user);
+      } else {
+        users.delete(user);
+      }
       return { ...prev, [roomCode]: Array.from(users) };
     });
   }, []);
 
   useEffect(() => {
-    const token = Cookies.get('token') || localStorage.getItem('token_fallback');
-    const _socket = io("http://localhost:5000", {
+    const token = Cookies.get('token');
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL;
+  const _socket = io(backendUrl, {
       auth: { token },
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
+      timeout: 20000,
     });
 
     _socket.on('connect', () => {
@@ -100,16 +126,23 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       console.log('Socket connected');
     });
 
-    _socket.on('disconnect', () => {
+    _socket.on('disconnect', (reason) => {
       setIsConnected(false);
-      console.log('Socket disconnected');
+      console.log('Socket disconnected:', reason);
     });
 
     _socket.on('connect_error', (err) => {
       console.error('Connect error:', err);
+      setIsConnected(false);
+      
       if (reconnectAttempts.current < maxReconnectAttempts) {
         reconnectAttempts.current++;
-        setTimeout(() => _socket.connect(), Math.pow(2, reconnectAttempts.current) * 1000);
+        setTimeout(() => {
+          console.log(`Reconnection attempt ${reconnectAttempts.current}`);
+          _socket.connect();
+        }, Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000));
+      } else {
+        console.error('Max reconnection attempts reached');
       }
     });
 
@@ -117,6 +150,10 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     _socket.on('user-joined', onUserJoined);
     _socket.on('user-left', onUserLeft);
     _socket.on('user-typing', onUserTyping);
+
+    _socket.on('error', (error) => {
+      console.error('Socket error:', error);
+    });
 
     setSocket(_socket);
 
@@ -132,7 +169,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
   const sendMessage = useCallback((msg: string, roomCode: string) => {
     if (socket && msg && roomCode) {
-      console.log(`Send Message in ${roomCode}: ${msg}`);
+      console.log(`Sending Message in ${roomCode}: ${msg}`);
       socket.emit('event:message', { message: msg, roomCode });
     }
   }, [socket]);
@@ -140,6 +177,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const joinRoom = useCallback((roomCode: string) => {
     if (socket && roomCode) {
       socket.emit('join', { roomCode });
+      // Initialize message arrays if they don't exist
       setMessages((prev) => ({ ...prev, [roomCode]: prev[roomCode] || [] }));
       setTypingUsers((prev) => ({ ...prev, [roomCode]: prev[roomCode] || [] }));
     }

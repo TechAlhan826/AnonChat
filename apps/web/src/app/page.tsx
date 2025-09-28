@@ -1,224 +1,243 @@
 'use client'
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { LogIn, Plus, Shield, Zap, Users } from "lucide-react";
 import { Button } from "./components/ui/button";
-import { Card, CardContent } from "./components/ui/card";
 import { Input } from "./components/ui/input";
-import { Label } from "./components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
+import { MessageCircle, Users, Lock, Zap, Shield, Globe, Plus, ArrowRight } from "lucide-react";
 import { useToast } from "./hooks/use-toast";
 import Cookies from 'js-cookie';
 
 export default function Home() {
-  const [roomCode, setRoomCode] = useState("");
-  const [roomName, setRoomName] = useState("");
-  const [roomType, setRoomType] = useState("group");
-  const [isJoining, setIsJoining] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
+  const [roomCode, setRoomCode] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
-  const joinRoom = async (code: string) => {
-    if (code.length !== 6) return toast({ title: "Error", description: "Invalid code length", variant: "destructive" });
-    setIsJoining(true);
-    try {
-      const token = Cookies.get('token');
-      const headers: HeadersInit = { "Content-Type": "application/json" };
-      if (token) headers.Authorization = `Bearer ${token}`;
+  useEffect(() => {
+    // Check if user is already logged in
+    const token = Cookies.get('token');
+    if (token) {
+      router.push('/dashboard');
+    }
+  }, [router]);
 
-      const res = await fetch("http://localhost:5000/api/rooms/join", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ code }),
+  const handleJoinRoom = async () => {
+    if (!roomCode.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a room code",
+        variant: "destructive"
       });
+      return;
+    }
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to join");
+    setIsLoading(true);
+    try {
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL;
+  const response = await fetch(`${backendUrl}/api/rooms/${roomCode.trim()}`);
+      
+      if (response.ok) {
+        router.push(`/auth/guest?redirect=/chat/${roomCode.trim()}`);
+      } else if (response.status === 404) {
+        toast({
+          title: "Room Not Found",
+          description: "The room code you entered doesn't exist.",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to check room. Please try again.",
+          variant: "destructive"
+        });
       }
-
-      // If guest, backend returns sessionToken? Set if present.
-      const data = await res.json();
-      if (data.sessionToken) Cookies.set('token', data.sessionToken, { expires: 1, secure: true, sameSite: 'strict' });
-
-      toast({ title: "Success", description: `Joined room ${code}!` });
-      router.push(`/chat/${code}`);
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Network error. Please check your connection.",
+        variant: "destructive"
+      });
     } finally {
-      setIsJoining(false);
+      setIsLoading(false);
     }
   };
 
-  const createRoom = async () => {
-    setIsCreating(true);
-    try {
-      const token = Cookies.get('token');
-      let endpoint = "http://localhost:5000/api/rooms/create-guest";  // Always guest for home; backend handles.
-      const headers: HeadersInit = { "Content-Type": "application/json" };
-      if (token) {
-        endpoint = "http://localhost:5000/api/rooms/create";
-        headers.Authorization = `Bearer ${token}`;
-      }
+  const handleCreateRoom = () => {
+    router.push('/auth/guest?redirect=/dashboard');
+  };
 
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ type: roomType, name: roomName }),  // Add name if backend supports.
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to create");
-      }
-
-      const data = await res.json();
-      toast({ title: "Success", description: `Room created! Code: ${data.code}` });
-      router.push(`/chat/${data.code}`);
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    } finally {
-      setIsCreating(false);
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleJoinRoom();
     }
   };
 
   return (
-    <div className="animate-fade-in">
-      <div className="max-w-4xl mx-auto px-4 py-12">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-foreground mb-4">Start Chatting Anonymously</h1>
-          <p className="text-xl text-muted-foreground mb-8">Join conversations instantly with a simple room code. No registration required.</p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      {/* Header */}
+      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+          <div className="flex items-center space-x-2">
+            <MessageCircle className="w-8 h-8 text-blue-600" />
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              AnonChat
+            </h1>
+          </div>
+          <div className="flex items-center space-x-3">
+            <Button 
+              variant="ghost" 
+              onClick={() => router.push('/auth/login')}
+              className="text-gray-700 hover:text-blue-600 hover:bg-blue-50"
+            >
+              Sign In
+            </Button>
+            <Button 
+              onClick={() => router.push('/auth/register')}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Get Started
+            </Button>
+          </div>
         </div>
+      </header>
 
-        <div className="grid md:grid-cols-2 gap-8 mb-12">
-          {/* Join Room Card */}
-          <Card className="animate-slide-up">
-            <CardContent className="p-8">
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-primary bg-opacity-10 rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <LogIn className="w-8 h-8 text-primary" />
-                </div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">Join Room</h3>
-                <p className="text-muted-foreground">Enter a 6-character room code to join existing conversations</p>
-              </div>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  joinRoom(roomCode);
-                }}
-                className="space-y-4"
-              >
-                <div>
-                  <Label htmlFor="roomCode" className="block text-sm font-medium text-foreground mb-2">
-                    Room Code
-                  </Label>
-                  <Input
-                    id="roomCode"
-                    type="text"
-                    maxLength={6}
-                    placeholder="ABC123"
-                    value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
-                    className="room-code text-center text-lg tracking-wider font-mono"
-                    data-testid="input-room-code"
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={isJoining || roomCode.length !== 6}
-                  data-testid="button-join-room"
+      {/* Hero Section */}
+      <section className="py-20 px-4">
+        <div className="container mx-auto text-center max-w-4xl">
+          <div className="mb-8">
+            <h2 className="text-5xl font-bold text-gray-900 mb-6 leading-tight">
+              Anonymous Chat,
+              <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent"> Infinite Possibilities</span>
+            </h2>
+            <p className="text-xl text-gray-600 mb-8 leading-relaxed">
+              Connect with people around the world in secure, anonymous chat rooms. 
+              No registration required - just jump in and start talking.
+            </p>
+          </div>
+
+          {/* Quick Join Card */}
+          <Card className="max-w-md mx-auto mb-12 shadow-lg border-0 bg-white/70 backdrop-blur-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center justify-center space-x-2 text-gray-800">
+                <ArrowRight className="w-5 h-5 text-blue-600" />
+                <span>Join a Room</span>
+              </CardTitle>
+              <CardDescription>Enter a room code to join an existing conversation</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Input
+                placeholder="Enter room code..."
+                value={roomCode}
+                onChange={(e) => setRoomCode(e.target.value)}
+                onKeyPress={handleKeyPress}
+                className="text-center text-lg font-mono tracking-wider"
+                disabled={isLoading}
+              />
+              <div className="flex space-x-2">
+                <Button 
+                  onClick={handleJoinRoom}
+                  disabled={isLoading}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white transition-all duration-200 hover:shadow-lg hover:scale-105"
                 >
-                  {isJoining ? "Joining..." : "Join Room"}
+                  {isLoading ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Joining...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <ArrowRight className="w-4 h-4 mr-2" />
+                      Join Room
+                    </>
+                  )}
                 </Button>
-              </form>
+                <Button 
+                  onClick={handleCreateRoom}
+                  variant="outline"
+                  className="flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200 hover:shadow-lg hover:scale-105"
+                  disabled={isLoading}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Room
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Create Room Card */}
-          <Card className="animate-slide-up delay-100">
-            <CardContent className="p-8">
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-accent bg-opacity-50 rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <Plus className="w-8 h-8 text-accent-foreground" />
+          {/* Features Grid */}
+          <div className="grid md:grid-cols-3 gap-8 mb-16">
+            <Card className="group hover:shadow-xl transition-all duration-300 hover:-translate-y-2 border-0 bg-white/70 backdrop-blur-sm">
+              <CardContent className="p-6 text-center">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-200 transition-colors duration-300">
+                  <Shield className="w-8 h-8 text-blue-600" />
                 </div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">Create Room</h3>
-                <p className="text-muted-foreground">Start a new conversation and invite others with a shareable code</p>
-              </div>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  createRoom();
-                }}
-                className="space-y-4"
-              >
-                <div>
-                  <Label htmlFor="roomName" className="block text-sm font-medium text-foreground mb-2">
-                    Room Name (Optional)
-                  </Label>
-                  <Input
-                    id="roomName"
-                    type="text"
-                    placeholder="My Chat Room"
-                    value={roomName}
-                    onChange={(e) => setRoomName(e.target.value)}
-                    data-testid="input-room-name"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="roomType" className="block text-sm font-medium text-foreground mb-2">
-                    Room Type
-                  </Label>
-                  <Select value={roomType} onValueChange={setRoomType}>
-                    <SelectTrigger data-testid="select-room-type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="group">Group Chat</SelectItem>
-                      <SelectItem value="p2p">One-to-One</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full"
-                  variant="secondary"
-                  disabled={isCreating}
-                  data-testid="button-create-room"
-                >
-                  {isCreating ? "Creating..." : "Create Room"}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">Anonymous & Secure</h3>
+                <p className="text-gray-600">Chat without revealing your identity. Your privacy is our priority.</p>
+              </CardContent>
+            </Card>
 
-        {/* Features Section */}
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="text-center p-6 animate-slide-up delay-200">
-            <div className="w-12 h-12 bg-primary bg-opacity-10 rounded-lg flex items-center justify-center mx-auto mb-4">
-              <Shield className="w-6 h-6 text-primary" />
-            </div>
-            <h4 className="font-semibold text-foreground mb-2">Anonymous</h4>
-            <p className="text-sm text-muted-foreground">Chat without revealing your identity. No personal data required.</p>
+            <Card className="group hover:shadow-xl transition-all duration-300 hover:-translate-y-2 border-0 bg-white/70 backdrop-blur-sm">
+              <CardContent className="p-6 text-center">
+                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-purple-200 transition-colors duration-300">
+                  <Zap className="w-8 h-8 text-purple-600" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">Real-time Messaging</h3>
+                <p className="text-gray-600">Experience lightning-fast message delivery with live typing indicators.</p>
+              </CardContent>
+            </Card>
+
+            <Card className="group hover:shadow-xl transition-all duration-300 hover:-translate-y-2 border-0 bg-white/70 backdrop-blur-sm">
+              <CardContent className="p-6 text-center">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-green-200 transition-colors duration-300">
+                  <Globe className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">Global Access</h3>
+                <p className="text-gray-600">Connect with people from around the world, no matter where you are.</p>
+              </CardContent>
+            </Card>
           </div>
-          <div className="text-center p-6 animate-slide-up delay-300">
-            <div className="w-12 h-12 bg-primary bg-opacity-10 rounded-lg flex items-center justify-center mx-auto mb-4">
-              <Zap className="w-6 h-6 text-primary" />
+
+          {/* CTA Section */}
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-white">
+            <h3 className="text-2xl font-bold mb-4">Ready to start chatting?</h3>
+            <p className="text-blue-100 mb-6">
+              Create an account for additional features like room management and chat history.
+            </p>
+            <div className="flex justify-center space-x-4">
+              <Button 
+                onClick={() => router.push('/auth/register')}
+                size="lg"
+                className="bg-white text-blue-600 hover:bg-gray-100 transition-all duration-200 hover:shadow-lg"
+              >
+                <Users className="w-5 h-5 mr-2" />
+                Sign Up Free
+              </Button>
+              <Button 
+                onClick={() => router.push('/auth/login')}
+                size="lg"
+                className="bg-white text-blue-600 hover:bg-gray-100 transition-all duration-200 hover:shadow-lg"
+              >
+                <Users className="w-5 h-5 mr-2" />
+                Sign In
+              </Button>
             </div>
-            <h4 className="font-semibold text-foreground mb-2">Real-Time</h4>
-            <p className="text-sm text-muted-foreground">Messages appear instantly. No delays, no waiting.</p>
-          </div>
-          <div className="text-center p-6 animate-slide-up delay-400">
-            <div className="w-12 h-12 bg-primary bg-opacity-10 rounded-lg flex items-center justify-center mx-auto mb-4">
-              <Users className="w-6 h-6 text-primary" />
-            </div>
-            <h4 className="font-semibold text-foreground mb-2">Scalable</h4>
-            <p className="text-sm text-muted-foreground">Support for thousands of concurrent users across multiple rooms.</p>
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white py-12">
+        <div className="container mx-auto px-4 text-center">
+          <div className="flex items-center justify-center space-x-2 mb-4">
+            <MessageCircle className="w-6 h-6" />
+            <span className="text-xl font-bold">AnonChat</span>
+          </div>
+          <p className="text-gray-400">
+            Anonymous, secure, and real-time messaging for everyone.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }

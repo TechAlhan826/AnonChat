@@ -1,36 +1,29 @@
 import type { Metadata } from "next";
-//import localFont from "next/font/local";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { SocketProvider } from "../context/SocketProvider";
-import { Header } from "./components/Header";  // New
+import { Toaster } from "./components/ui/toaster";
 
-// const geistSans = localFont({
-//   src: "./fonts/GeistVF.woff",
-//   variable: "--font-geist-sans",
-// });
-// const geistMono = localFont({
-//   src: "./fonts/GeistMonoVF.woff",
-//   variable: "--font-geist-mono",
-// });  className={`${geistSans.variable} ${geistMono.variable}`}
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "AnonChat",
-  description: "Anonymous chat app",
+  title: "AnonChat - Anonymous Real-time Chat",
+  description: "Anonymous, secure, and real-time messaging for everyone",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en">
-      <SocketProvider>
-        <body>
-          <Header />  // New
+      <body className={inter.className}>
+        <SocketProvider>
           {children}
-        </body>
-      </SocketProvider>
+          <Toaster />
+        </SocketProvider>
+      </body>
     </html>
   );
 }

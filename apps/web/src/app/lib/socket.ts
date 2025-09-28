@@ -23,7 +23,8 @@ export class SocketClient {
     if (this.socket?.connected) return;
 
     const token = Cookies.get('token');
-    this.socket = io('http://localhost:5000', {
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL;
+  this.socket = io(backendUrl, {
       reconnection: true,
       reconnectionAttempts: this.maxReconnectAttempts,
       reconnectionDelay: 1000,

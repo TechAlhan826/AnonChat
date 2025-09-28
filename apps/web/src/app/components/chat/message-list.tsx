@@ -20,15 +20,17 @@ function getColorForSender(sender: string) {
   for (let i = 0; i < sender.length; i++) {
     hash = sender.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const color = `hsl(${hash % 360}, 70%, 70%)`;
-  return color;
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 65%, 55%)`;
 }
 
 export const MessageList = ({ room, messages, currentUserId, currentUserName }: MessageListProps) => {
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    listRef.current?.scrollTo(0, listRef.current.scrollHeight);
+    if (listRef.current) {
+      listRef.current.scrollTo(0, listRef.current.scrollHeight);
+    }
   }, [messages]);
 
   return (
@@ -36,22 +38,58 @@ export const MessageList = ({ room, messages, currentUserId, currentUserName }: 
       {messages.map((msg, i) => {
         const isSent = msg.sender === currentUserName;
         const isSystem = msg.sender === 'system';
-        const bgColor = isSystem ? 'bg-gray-200 text-gray-800' : isSent ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800';
-        const align = isSent ? 'ml-auto' : 'mr-auto';
-        const senderColor = getColorForSender(msg.sender);
+        
+        if (isSystem) {
+          return (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center"
+            >
+              <div className="bg-gray-200 text-gray-600 px-3 py-1 rounded-full text-xs inline-block">
+                <span dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.content) }} />
+              </div>
+            </motion.div>
+          );
+        }
 
+        const senderColor = getColorForSender(msg.sender);
+        
         return (
           <motion.div
             key={i}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`max-w-[80%] rounded-lg p-3 shadow ${bgColor} ${align}`}
+            className={`flex ${isSent ? 'justify-end' : 'justify-start'}`}
           >
-            {!isSystem && room.type === 'group' && !isSent && (
-              <span style={{ color: senderColor }} className="font-bold block mb-1">{msg.sender}</span>
-            )}
-            <span dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.content) }} />
-            <span className="text-xs opacity-70 block mt-1">{new Date(msg.timestamp).toLocaleTimeString()}</span>
+            <div className={`max-w-[80%] rounded-lg p-3 shadow-sm ${
+              isSent 
+                ? 'bg-blue-500 text-white rounded-br-sm' 
+                : 'bg-gray-100 text-gray-800 rounded-bl-sm border'
+            }`}>
+              {!isSent && room.type === 'group' && (
+                <div className="mb-1">
+                  <span 
+                    style={{ color: senderColor }} 
+                    className="font-semibold text-sm"
+                  >
+                    {msg.sender}
+                  </span>
+                </div>
+              )}
+              <div className="break-words">
+                <span dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.content) }} />
+              </div>
+              <div className={`text-xs mt-1 ${
+                isSent ? 'text-blue-100' : 'text-gray-500'
+              }`}>
+                {new Date(msg.timestamp).toLocaleTimeString([], { 
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                })}
+              </div>
+            </div>
           </motion.div>
         );
       })}

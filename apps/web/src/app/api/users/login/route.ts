@@ -29,7 +29,7 @@ export async function POST(request: NextRequest){
         const token = await jwt.sign(td, process.env.TOKEN_SECRET!, {expiresIn: "1d"},);
         const resp = NextResponse.json({message:"Login Successfull !", success: true},);
 
-        resp.cookies.set("token", token, {httpOnly: true});
+        resp.cookies.set("token", token); // , {httpOnly: true}
         return resp;
 
     } catch(error: any){

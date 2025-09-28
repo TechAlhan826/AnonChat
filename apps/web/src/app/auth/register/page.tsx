@@ -16,7 +16,7 @@ const schema = z.object({
   email: z.string().email("Invalid email"),
   password: z.string().min(6, "Password too short"),
   confirmPassword: z.string(),
-  agreeToTerms: z.boolean().refine(val => val === true, "Must agree to terms"),
+  //agreeToTerms: z.boolean().refine(val => val === true, "Must agree to terms"),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -38,7 +38,7 @@ export default function Register() {
       const res = await fetch('/api/users/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: data.name, email: data.email, password: data.password }),
+        body: JSON.stringify({ username: data.name, email: data.email, password: data.password }),
       });
 
       if (!res.ok) {
@@ -125,7 +125,7 @@ export default function Register() {
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="terms"
-                  {...register("agreeToTerms")}
+                  // {...register(true)}
                   data-testid="checkbox-terms"
                 />
                 <Label htmlFor="terms" className="text-sm text-muted-foreground">
@@ -139,7 +139,7 @@ export default function Register() {
                   </a>
                 </Label>
               </div>
-              {errors.agreeToTerms && <p className="text-red-500 text-sm">{errors.agreeToTerms.message}</p>}
+              {/* {errors.agreeToTerms && <p className="text-red-500 text-sm">{errors.agreeToTerms.message}</p>} */}
               <Button
                 type="submit"
                 className="w-full"

@@ -15,7 +15,8 @@ import { jwtDecode } from "jwt-decode";
 interface DecodedToken {
   type?: 'guest';
   id: string;
-  name?: string;  // For sender
+  name?: string;
+  userId?: string;
 }
 
 export default function ChatRoom() {
@@ -36,57 +37,67 @@ export default function ChatRoom() {
   const roomTyping = typingUsers[code] || [];
 
   useEffect(() => {
-    const token = Cookies.get('token'); // || localStorage.getItem('token_fallback');
+    const token:string = localStorage.getItem('token') as string || Cookies.get('token') as string;
     if (!token) {
-      router.push('/');
+      router.push('/auth/login');
       return;
     }
-    localStorage.setItem('token_fallback', token);
-    const decoded: DecodedToken = jwtDecode(token);
-    setUser(decoded);
-    setIsGuest(decoded.type === 'guest');
+    
+    try {
+      const decoded: DecodedToken = jwtDecode(token);
+      setUser(decoded);
+      setIsGuest(decoded.type === 'guest');
 
-    const join = async () => {
-      try {
-        joinRoom(code);
-        const res = await fetch(`http://localhost:5000/api/rooms/${code}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) {
-          const errorData = await res.json();
-          if (errorData.message.includes('Invalid token')) {
-            Cookies.remove('token');
-            localStorage.removeItem('token_fallback');
-            router.push("/auth/login");
-            return;
-          }
-          throw new Error(errorData.message);
-        }
-        const data = await res.json();
-        setRoomData(data);
-        setPreserve(data.room.preserveHistory);
-        setIsCreator(data.room.createdBy === decoded.id);
-
-        if (data.room.preserveHistory) {
-          const histRes = await fetch(`http://localhost:5000/api/rooms/${code}/messages`, {
+      const join = async () => {
+        try {
+          joinRoom(code);
+          const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL;
+          const res = await fetch(`${backendUrl}/api/rooms/${code}`, {
             headers: { Authorization: `Bearer ${token}` },
           });
-          if (histRes.ok) {
-            const hist = await histRes.json();
-            hist.forEach((m: any) => {
-              addMessage({ content: m.content, sender: m.sender || 'Unknown', timestamp: m.createdAt }, code);
-            });
+          if (!res.ok) {
+            const errorData = await res.json();
+            if (errorData.message.includes('Invalid token')) {
+              Cookies.remove('token');
+              router.push("/auth/login");
+              return;
+            }
+            throw new Error(errorData.message);
           }
-        }
-        setHasJoined(true);
-      } catch (err: any) {
-        toast({ title: "Error", description: err.message, variant: "destructive" });
-        router.push("/");
-      }
-    };
+          const data = await res.json();
+          setRoomData(data);
+          setPreserve(data.room.preserveHistory);
+          setIsCreator(data.room.createdBy === decoded.id || data.room.createdBy === decoded.userId);
 
-    if (isConnected) join();
-    else toast({ description: "Connecting..." });
+          if (data.room.preserveHistory) {
+            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL;
+            const histRes = await fetch(`${backendUrl}/api/rooms/${code}/messages`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (histRes.ok) {
+              const hist = await histRes.json();
+              hist.forEach((m: any) => {
+                addMessage({ content: m.content, sender: m.sender || 'Unknown', timestamp: m.createdAt }, code);
+              });
+            }
+          }
+          setHasJoined(true);
+        } catch (err: any) {
+          toast({ title: "Error", description: err.message, variant: "destructive" });
+          router.push("/dashboard");
+        }
+      };
+
+      if (isConnected) {
+        join();
+      } else {
+        toast({ description: "Connecting..." });
+      }
+    } catch (error) {
+      console.error('Token decode error:', error);
+      Cookies.remove('token');
+      router.push('/auth/login');
+    }
   }, [code, isConnected, joinRoom, toast, router, addMessage]);
 
   useEffect(() => {
@@ -103,8 +114,9 @@ export default function ChatRoom() {
 
   const handleSend = () => {
     if (!input.trim() || !isConnected) return;
-    const timestamp = new Date().toISOString();
-    addMessage({ content: input, sender: user?.name || 'Guest', timestamp }, code);
+    
+    // Only send the message via socket, don't add locally
+    // The socket will handle adding it back via the message event
     sendMessage(input, code);
     setInput('');
   };
@@ -112,7 +124,8 @@ export default function ChatRoom() {
   const handlePreserveChange = async (checked: boolean) => {
     const token = Cookies.get('token');
     try {
-      const res = await fetch(`http://localhost:5000/api/rooms/${code}/preserve`, {
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL;
+  const res = await fetch(`${backendUrl}/api/rooms/${code}/preserve`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -131,13 +144,14 @@ export default function ChatRoom() {
   const handleLeaveRoom = async () => {
     const token = Cookies.get('token');
     try {
-      await fetch(`http://localhost:5000/api/rooms/${code}/leave`, {
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL;
+  await fetch(`${backendUrl}/api/rooms/${code}/leave`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
       leaveRoom(code);
       toast({ description: "Left room" });
-      router.push("/");
+      router.push("/dashboard");
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -182,8 +196,9 @@ export default function ChatRoom() {
             </p>
           </div>
           {isCreator && (
-            <label>
-              Preserve <Checkbox checked={preserve} onCheckedChange={handlePreserveChange} />
+            <label className="flex items-center space-x-2">
+              <span className="text-sm">Preserve</span>
+              <Checkbox checked={preserve} onCheckedChange={handlePreserveChange} />
             </label>
           )}
           <Button variant="destructive" size="sm" onClick={handleLeaveRoom} data-testid="button-leave-room">
@@ -192,8 +207,19 @@ export default function ChatRoom() {
         </div>
       </div>
       <div className="flex-1 flex flex-col max-w-7xl mx-auto w-full">
-        <MessageList room={roomData.room} messages={roomMessages} currentUserId={user?.id} currentUserName={user?.name || 'Guest'} />
-        <MessageInput roomId={code} value={input} onChange={setInput} onSend={handleSend} disabled={!isConnected} />
+        <MessageList 
+          room={roomData.room} 
+          messages={roomMessages} 
+          currentUserId={user?.id || user?.userId || ''} 
+          currentUserName={user?.name || 'Guest'} 
+        />
+        <MessageInput 
+          roomId={code} 
+          value={input} 
+          onChange={setInput} 
+          onSend={handleSend} 
+          disabled={!isConnected} 
+        />
       </div>
     </div>
   );
