@@ -1,3 +1,6 @@
+import { io, Socket } from 'socket.io-client';
+import Cookies from 'js-cookie';
+
 export interface SocketMessage {
   type: 'join-room' | 'leave-room' | 'send-message' | 'typing' | 'user-joined' | 'user-left' | 'new-message' | 'user-typing';
   roomId?: string;
@@ -12,132 +15,90 @@ export interface SocketMessage {
 }
 
 export class SocketClient {
-  private ws: WebSocket | null = null;
-  private listeners: Map<string, Set<(data: any) => void>> = new Map();
+  private socket: Socket | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
-  private reconnectTimeout: NodeJS.Timeout | null = null;
 
   connect() {
-    if (this.ws?.readyState === WebSocket.OPEN) return;
+    if (this.socket?.connected) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    
-    this.ws = new WebSocket(wsUrl);
+    const token = Cookies.get('token');
+    this.socket = io('http://localhost:5000', {
+      reconnection: true,
+      reconnectionAttempts: this.maxReconnectAttempts,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      auth: { token },  // Secure: Send token for backend verify.
+    });
 
-    this.ws.onopen = () => {
-      console.log('WebSocket connected');
+    this.socket.on('connect', () => {
+      console.log('Socket.io connected');
       this.reconnectAttempts = 0;
-    };
+    });
 
-    this.ws.onmessage = (event) => {
-      try {
-        const message: SocketMessage = JSON.parse(event.data);
-        this.emit(message.type, message);
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
+    this.socket.on('disconnect', (reason) => {
+      console.log(`Socket.io disconnected: ${reason}`);
+      if (reason === 'io server disconnect') {
+        // Manual reconnect if server forced.
+        this.attemptReconnect();
       }
-    };
+    });
 
-    this.ws.onclose = () => {
-      console.log('WebSocket disconnected');
+    this.socket.on('connect_error', (error) => {
+      console.error('Socket.io connect error:', error);
       this.attemptReconnect();
-    };
-
-    this.ws.onerror = (error) => {
-      console.error('WebSocket error: ', error);
-    };
+    });
   }
 
   private attemptReconnect() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      const delay = Math.pow(2, this.reconnectAttempts) * 1000; // Exponential backoff
-      
-      this.reconnectTimeout = setTimeout(() => {
-        console.log(`Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-        this.connect();
-      }, delay);
+      console.log(`Manual reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
+      this.socket?.connect();
+    } else {
+      console.error('Max reconnect attempts reached');
     }
   }
 
   disconnect() {
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
-    }
-    
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
     }
   }
 
   send(message: SocketMessage) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
+    if (this.socket?.connected) {
+      this.socket.emit(message.type, message);
     } else {
-      console.warn('WebSocket not connected, message not sent:', message);
+      console.warn('Socket not connected, message not sent:', message);
     }
   }
 
   on(event: string, callback: (data: any) => void) {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-    this.listeners.get(event)!.add(callback);
+    this.socket?.on(event, callback);
+    return () => this.socket?.off(event, callback);
   }
 
   off(event: string, callback: (data: any) => void) {
-    const eventListeners = this.listeners.get(event);
-    if (eventListeners) {
-      eventListeners.delete(callback);
-    }
+    this.socket?.off(event, callback);
   }
 
-  private emit(event: string, data: any) {
-    const eventListeners = this.listeners.get(event);
-    if (eventListeners) {
-      eventListeners.forEach(callback => callback(data));
-    }
-  }
-
-  // Convenience methods
+  // Convenience methods (emit wrappers)
   joinRoom(roomId: string, user: any) {
-    this.send({
-      type: 'join-room',
-      roomId,
-      user,
-    });
+    this.send({ type: 'join-room', roomId, user });
   }
 
   leaveRoom(roomId: string, user: any) {
-    this.send({
-      type: 'leave-room',
-      roomId,
-      user,
-    });
+    this.send({ type: 'leave-room', roomId, user });
   }
 
   sendMessage(roomId: string, content: string, userId?: string, guestId?: string, sender?: any) {
-    this.send({
-      type: 'send-message',
-      roomId,
-      content,
-      userId,
-      guestId,
-      sender,
-    });
+    this.send({ type: 'send-message', roomId, content, userId, guestId, sender });
   }
 
   sendTyping(roomId: string, user: any, isTyping: boolean) {
-    this.send({
-      type: 'typing',
-      roomId,
-      user,
-      isTyping,
-    });
+    this.send({ type: 'typing', roomId, user, isTyping });
   }
 }
 

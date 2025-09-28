@@ -1,29 +1,25 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { socketClient } from "../lib/socket";
 
 export function useSocket() {
-  const isConnected = useRef(false);
+  const isMounted = useRef(true);
+  const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    if (!isConnected.current) {
+    if (isMounted.current) {
       socketClient.connect();
-      isConnected.current = true;
+      setIsConnected(true);  // Update on connect.
     }
 
     return () => {
-      if (isConnected.current) {
-        socketClient.disconnect();
-        isConnected.current = false;
-      }
+      isMounted.current = false;
+      socketClient.disconnect();
+      setIsConnected(false);
     };
   }, []);
 
   const on = useCallback((event: string, callback: (data: any) => void) => {
-    socketClient.on(event, callback);
-    
-    return () => {
-      socketClient.off(event, callback);
-    };
+    return socketClient.on(event, callback);  // Returns cleanup fn.
   }, []);
 
   const emit = useCallback((event: any) => {
@@ -47,6 +43,7 @@ export function useSocket() {
   }, []);
 
   return {
+    isConnected,
     on,
     emit,
     joinRoom,
