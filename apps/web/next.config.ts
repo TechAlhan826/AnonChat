@@ -1,18 +1,13 @@
+import path from "path";
 import type { NextConfig } from "next";
 
+// Ensure serverless bundles include files that live outside this app directory (monorepo packages, shared configs).
 const nextConfig: NextConfig = {
-  /* config options here */
   reactStrictMode: true,
-  
-  // Transpile packages from monorepo
-  transpilePackages: ['@repo/ui', '@repo/eslint-config', '@repo/typescript-config'],
-  
-  // Output configuration for Vercel
-  output: 'standalone',
-  
-  // Experimental features for better monorepo support
+  output: "standalone",
   experimental: {
-    outputFileTracingRoot: require('path').join(__dirname, '../../'),
+    // Trace from the repo root so Vercel can package non-local dependencies without symlinks.
+    outputFileTracingRoot: path.join(__dirname, "../.."),
   },
 };
 
