@@ -1,13 +1,11 @@
-import path from "path";
 import type { NextConfig } from "next";
+import path from "path";
 
-// Ensure serverless bundles include files that live outside this app directory (monorepo packages, shared configs).
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  output: "standalone",
   experimental: {
-    // Trace from the repo root so Vercel can package non-local dependencies without symlinks.
-    outputFileTracingRoot: path.join(__dirname, "../.."),
+    // Ensure file tracing resolves from repo root in monorepo deployments (prevents symlinked output packages on Vercel).
+    outputFileTracingRoot: path.join(__dirname, "../../"),
   },
 };
 

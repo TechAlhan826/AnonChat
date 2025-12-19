@@ -26,6 +26,8 @@
 
     /* Modules */
     "module": "commonjs",                                /* Specify what module code is generated. */
+    "moduleResolution": "node",                          /* Resolve modules like Node. */
+    "types": ["node"],                                    /* Include Node globals like process. */
     "rootDir": "./src",   
     "outDir": "./dist",                               /* compile & put it to dist folder. */
     // "moduleResolution": "node10",                     /* Specify how TypeScript looks up a file from a given module specifier. */
